@@ -14,7 +14,11 @@ func init() {
 	log.SetPrefix("Blockchain: ")
 }
 
-const MINING_DIFFICULTY int = 3
+const (
+	MINING_DIFFICULTY int = 3
+	MINING_SENDER         = "coinbase"
+	MINING_REWARD         = 1.0
+)
 
 type Block struct {
 	timeStamp    int64
@@ -67,20 +71,22 @@ func (b *Block) MarshalJSON() ([]byte, error) {
 type Blockchain struct {
 	transactionPool []*Transaction
 	chain           []*Block
+	blockchainAddr  string
 }
 
 // CreateBlock add block and insert into chain
 func (bc *Blockchain) CreateBlock(prevHash [32]byte, nonce int) *Block {
 	b := NewBlock(prevHash, nonce, bc.transactionPool)
 	bc.chain = append(bc.chain, b)
-	bc.transactionPool = []*Transaction{}
+	bc.transactionPool = []*Transaction{} // clean transaction pool
 	return b
 }
 
-func NewBlockchain() *Blockchain {
+func NewBlockchain(blockchainAddr string) *Blockchain {
 	bc := new(Blockchain)
 	b := Block{}
 	bc.CreateBlock(b.prevHash, 0)
+	bc.blockchainAddr = blockchainAddr
 	return bc
 }
 
@@ -132,6 +138,35 @@ func (bc *Blockchain) ProofOfWork() int {
 	return nonce
 }
 
+// Mining  func for mine and gift reward miner
+func (bc *Blockchain) Mining() bool {
+	bc.AddTransaction(MINING_SENDER, bc.blockchainAddr, MINING_REWARD)
+	nonce := bc.ProofOfWork()
+	prevHash := bc.LastBlock().Hash()
+	bc.CreateBlock(prevHash, nonce)
+	log.Println("action : mining ==> success")
+	return true
+}
+
+// CalculateTotalAmount to get total amount
+func (bc *Blockchain) CalculateTotalAmount(blockchainAddr string) float32 {
+	var totalAmount float32 // to catch value
+	for _, b := range bc.chain {
+		for _, t := range b.transactions {
+			value := t.value
+			// if addr as recipient got +
+			if blockchainAddr == t.recipientBlockchainAddr {
+				totalAmount += value
+			}
+			// if addr as sender got -
+			if blockchainAddr == t.senderBlockchainAddr {
+				totalAmount -= value
+			}
+		}
+	}
+	return totalAmount
+}
+
 type Transaction struct {
 	senderBlockchainAddr    string
 	recipientBlockchainAddr string
@@ -162,24 +197,37 @@ func (t *Transaction) MarshalJSON() ([]byte, error) {
 }
 
 func main() {
-	blockChain := NewBlockchain()
+	blockChain := NewBlockchain("JF92")
 
-	prevHash := blockChain.LastBlock().Hash()
 	blockChain.AddTransaction("Allah", "Jamal", 99999999999999999999909999999)
-	nonce := blockChain.ProofOfWork()
-	blockChain.CreateBlock(prevHash, nonce)
+	blockChain.Mining()
 
-	prevHash = blockChain.LastBlock().Hash()
 	blockChain.AddTransaction("jamal", "mom", 24000000000000)
 	blockChain.AddTransaction("jamal", "dad", 20000000000000)
+	blockChain.Mining()
 
-	nonce = blockChain.ProofOfWork()
-	blockChain.CreateBlock(prevHash, nonce)
-
-	prevHash = blockChain.LastBlock().Hash()
-	nonce = blockChain.ProofOfWork()
 	blockChain.AddTransaction("jamal", "sis", 210000000)
-	blockChain.CreateBlock(prevHash, nonce)
+	blockChain.AddTransaction("C", "D", 2)
+	//blockChain.AddTransaction("D", "C", 2)
+	blockChain.Mining()
 	blockChain.Print()
 
+	fmt.Println("JAMAL DUID", blockChain.CalculateTotalAmount("Jamal"))
+	fmt.Println("JF92 DUID", blockChain.CalculateTotalAmount("JF92"))
+	fmt.Println("C DUID", blockChain.CalculateTotalAmount("C"))
+	fmt.Println("D DUID", blockChain.CalculateTotalAmount("D"))
+	//fmt.Println("D DUID", blockChain.CalculateTotalAmount("D"))
+
 }
+
+// NOTE FOR SOLVE :
+// - PrevHash
+// - MinerAddr
+// - Add validate totalAmount cant negative
+
+// How actually Tx in blockchain
+// example :
+// Rei's as sender make tx where inside (sender, recipient, value) This tx signed with digital signature generate from
+// privateKey Rei's. The resulting transaction (including the signature) is broadcast to the blockchain network.
+// Nodes validation the digital signature rei's usage publicKey rei's to confirm Rei is the real sender.
+// Afterward, nodes check if Rei has sufficient funds to complete the transaction.
