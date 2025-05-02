@@ -60,12 +60,12 @@ func (b *Block) Hash() [32]byte {
 func (b *Block) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		TimeStamp    int64          `json:"time_stamp"`
-		PrevHash     [32]byte       `json:"prev_hash"`
+		PrevHash     string         `json:"prev_hash"`
 		Nonce        int            `json:"nonce"`
 		Transactions []*Transaction `json:"transactions"`
 	}{
 		TimeStamp:    b.timeStamp,
-		PrevHash:     b.prevHash,
+		PrevHash:     fmt.Sprintf("%x", b.prevHash),
 		Nonce:        b.nonce,
 		Transactions: b.transactions,
 	})
@@ -75,6 +75,7 @@ type Blockchain struct {
 	transactionPool []*Transaction
 	chain           []*Block
 	blockchainAddr  string
+	port            uint16
 }
 
 // CreateBlock add block and insert into chain
@@ -85,12 +86,21 @@ func (bc *Blockchain) CreateBlock(prevHash [32]byte, nonce int) *Block {
 	return b
 }
 
-func NewBlockchain(blockchainAddr string) *Blockchain {
+func NewBlockchain(blockchainAddr string, port uint16) *Blockchain {
 	bc := new(Blockchain)
 	b := Block{}
 	bc.CreateBlock(b.prevHash, 0)
 	bc.blockchainAddr = blockchainAddr
+	bc.port = port
 	return bc
+}
+
+func (bc *Blockchain) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Block []*Block `json:"chain"`
+	}{
+		Block: bc.chain,
+	})
 }
 
 func (bc *Blockchain) Print() {
@@ -231,3 +241,18 @@ func (t *Transaction) MarshalJSON() ([]byte, error) {
 // privateKey Rei's. The resulting transaction (including the signature) is broadcast to the blockchain network.
 // Nodes validation the digital signature rei's usage publicKey rei's to confirm Rei is the real sender.
 // Afterward, nodes check if Rei has sufficient funds to complete the transaction.
+
+type TransactionRequest struct {
+	SenderBlockchainAddr    string  `json:"sender_blockchain_addr"`
+	RecipientBlockchainAddr string  `json:"recipient_blockchain_addr"`
+	SenderPublicKey         string  `json:"sender_public_key"`
+	Value                   float32 `json:"value"`
+	Signature               string  `json:"signature"`
+}
+
+func (r TransactionRequest) Validate() bool {
+	if r.SenderBlockchainAddr == "" || r.RecipientBlockchainAddr == "" || r.SenderPublicKey == "" || r.Value <= 0 {
+		return false
+	}
+	return true
+}
